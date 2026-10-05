@@ -1,0 +1,20 @@
+# 环境与隐私
+.env
+
+# Python 缓存
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+
+# 虚拟环境 (如果有的话)
+venv/
+.conda/
+
+# IDE 配置
+.idea/
+.vscode/
+
+# 日志与本地数据
+trace/*.jsonl
+*.log
