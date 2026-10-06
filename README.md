@@ -18,14 +18,7 @@
 > 评测现状（诚实记录）：按 `hit@1` + MRR 的严格口径，**朴素 RAG 100%、Agentic 90%**
 > —— 查询改写在这份语料上不但没带来增益，反而**变差了**。详见下方「评测」一节。
 
-## 环境准备
-
-依赖装在 conda 环境 `langchain1.2` 里（Python 3.13）：
-`openai` / `pymilvus` / `psycopg` / `python-dotenv` / `requests` / `pytest`。
-
-```bash
-conda activate langchain1.2
-```
+## 配置
 
 `.env` 放在仓库根目录，需要以下配置（`.env` 已在 `.gitignore` 中，不要提交）：
 
@@ -37,26 +30,6 @@ conda activate langchain1.2
 | `MILVUS_URI` | 默认 `http://localhost:19530` |
 | `DB_NAME` | Milvus 库名，如 `rag_fitagent` |
 | `COLLECTION_NAME` | 集合名，如 `knowledge_docs` |
-
-## 启动依赖服务
-
-PostgreSQL 与 Milvus 都是 **Docker 容器**（不是 Windows 原生服务），且 restart policy 为 `no` —— **重启机器后不会自动回来**，需要手动拉起：
-
-```bash
-# 1. 先确保 Docker Desktop 引擎在运行，然后：
-docker start postgres
-
-# 2. Milvus（含 etcd / minio 三个容器）
-docker compose -f D:\docker_data\docker-compose.yml up -d
-```
-
-Ollama 是原生进程，`ollama serve` 起（或直接启动 Ollama 应用），并确认已拉取模型：
-
-```bash
-ollama pull bge-m3
-```
-
-> 另有一份旧的 compose 在 `C:\Users\gjw11\milvus\docker-compose.yml`（容器名 `milvus-standalone` 等），**不是**当前在用的那套，别弄混。
 
 ## 快速开始
 
