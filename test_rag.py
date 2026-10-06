@@ -4,7 +4,7 @@ import pytest
 
 from config import require_env
 from rag import ingest
-from rag.retriever import retrieve
+from rag.retriever import retrieve, retrieve_many
 from rag.vector_store import get_milvus_client
 
 # 期望值硬编码，刻意不 import ingest 里的常量：
@@ -42,6 +42,22 @@ def test_retriever_returns_results(ingested):
 
 def test_top_k_is_respected(ingested):
     assert len(retrieve("营业时间", top_k=1)) == 1
+
+
+def test_retrieve_many_aligns_with_queries_and_matches_retrieve(ingested):
+    """批量检索只是省掉重复的客户端构建/集合加载，结果必须与逐条 retrieve 一致。"""
+    queries = ["场馆几点开门几点关门", "会员卡不想练了能退款吗"]
+
+    batched = retrieve_many(queries, top_k=3)
+
+    assert len(batched) == len(queries)
+    for query, hits in zip(queries, batched):
+        assert len(hits) == 3
+        assert [h["id"] for h in hits] == [h["id"] for h in retrieve(query, top_k=3)]
+
+
+def test_retrieve_many_empty_queries(ingested):
+    assert retrieve_many([], top_k=3) == []
 
 
 @pytest.mark.parametrize(
