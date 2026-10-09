@@ -18,19 +18,6 @@
 > 评测现状（诚实记录）：按 `hit@1` + MRR 的严格口径，**朴素 RAG 100%、Agentic 90%**
 > —— 查询改写在这份语料上不但没带来增益，反而**变差了**。详见下方「评测」一节。
 
-## 配置
-
-`.env` 放在仓库根目录，需要以下配置（`.env` 已在 `.gitignore` 中，不要提交）：
-
-| 变量 | 说明 |
-|---|---|
-| `DEEPSEEK_API_KEY` | DeepSeek API Key |
-| `DEEPSEEK_BASE_URL` | 默认 `https://api.deepseek.com` |
-| `DATABASE_URL` | PostgreSQL 连接串 |
-| `MILVUS_URI` | 默认 `http://localhost:19530` |
-| `DB_NAME` | Milvus 库名，如 `rag_fitagent` |
-| `COLLECTION_NAME` | 集合名，如 `knowledge_docs` |
-
 ## 快速开始
 
 ```bash
@@ -41,15 +28,17 @@ pytest -v                   # 跑测试
 
 ## 测试
 
-默认 `pytest` 不调用 DeepSeek：需要真实 API 的用例带 `@pytest.mark.llm`，会被自动跳过。手动开启：
+全套测试都打真实服务：PostgreSQL、Milvus、Ollama 一律真连，没有 mock、没有打桩。
+
+- 数据层：PostgreSQL 连接、`db/seed.py` 灌数与数据正确性
+- 向量层：Milvus 连接、`rag/ingest.py` 入库与 `rag/retriever.py` 检索
+- 决策层：`grade_documents` 评分与 `search_policy` 检索循环（真打 DeepSeek）
+
+需要真实 DeepSeek 调用的用例带 `@pytest.mark.llm`，默认跳过（花钱、结果不确定、还依赖网络）。手动开启：
 
 ```bash
 $env:RUN_LLM_TESTS=1; pytest -m llm -v     # PowerShell
 ```
-
-- 纯单测（无网络）：`test_llm.py` / `test_transform.py` / `test_eval.py`
-- LLM 打桩、真实 Milvus + Ollama：`test_policy.py`（评分与检索循环）、`test_rag.py`
-- 真实端到端冒烟（默认跳过）：`test_policy.py` 里标记 `llm` 的用例
 
 ## 评测
 

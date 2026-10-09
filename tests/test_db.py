@@ -1,4 +1,4 @@
-"""真实连接 PostgreSQL 的冒烟测试 —— 不 mock，也不 skip。"""
+"""真实连接 PostgreSQL 的冒烟测试（默认执行，不跳过）。"""
 
 from db.connection import get_db_conn
 

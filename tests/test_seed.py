@@ -1,4 +1,4 @@
-"""校验 db/seed.py 真的把数据灌进了 PostgreSQL —— 不 mock，也不 skip。"""
+"""校验 db/seed.py 真的把数据灌进了 PostgreSQL（默认执行，不跳过）。"""
 
 import pytest
 

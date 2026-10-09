@@ -1,4 +1,4 @@
-"""校验 rag/ingest.py 真的把知识文档灌进了 Milvus，且 retriever 检索得到 —— 不 mock。"""
+"""校验 rag/ingest.py 真的把知识文档灌进了 Milvus，且 retriever 检索得到。"""
 
 import pytest
 
@@ -21,6 +21,7 @@ def ingested():
 
 def test_collection_has_20_docs(ingested):
     client = get_milvus_client(db_name=require_env("DB_NAME"))
+    client.flush(COLLECTION)  # 加这一行，强制落盘
     client.load_collection(COLLECTION)
 
     rows = client.query(COLLECTION, filter="", output_fields=["count(*)"])
