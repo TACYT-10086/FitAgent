@@ -124,7 +124,16 @@ def transform(question: str, strategy: str) -> list[str]:
     """
     question = (question or "").strip()
     queries = STRATEGIES[resolve_strategy(strategy)](question)
+    print("=" * 12+ "策略产出结果（转换为新问题）"+ "=" * 12)
+    print(queries)
+    print("="*30)
+    print()
+
     queries = [q.strip() for q in queries if isinstance(q, str) and q.strip()]
+    print("=" * 12+ "产出做质检和清理"+ "=" * 12)
+    print(queries)
+    print("="*30)
+    print()
 
     if queries:
         return queries

@@ -12,7 +12,7 @@ import openai
 
 from config import get_env, require_env
 
-DEFAULT_MODEL = "deepseek-chat"
+DEFAULT_MODEL = "deepseek-v4-flash"
 DEFAULT_BASE_URL = "https://api.deepseek.com"
 DEFAULT_TIMEOUT = 60.0
 # 中文 + JSON 输出留足余量；deepseek-chat 单次输出上限 8192

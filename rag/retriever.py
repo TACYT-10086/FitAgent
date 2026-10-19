@@ -125,6 +125,8 @@ def grade_documents(question: str, docs: list[dict], *, threshold: int = 1) -> d
     )
 
     raw_grades = data.get("grades") or []
+    reason = raw_grades[0].get("reason") or ""
+
     verdicts: dict[int, bool] = {}
     for item in raw_grades:
         if not isinstance(item, dict):
@@ -147,5 +149,5 @@ def grade_documents(question: str, docs: list[dict], *, threshold: int = 1) -> d
         "grades": grades,
         # 模型自报的 sufficient 不可信（它不知道 threshold 是多少），以本地计数为准
         "sufficient": len(relevant) >= threshold,
-        "reason": str(data.get("reason") or ""),
+        "reason": str(reason or ""),
     }

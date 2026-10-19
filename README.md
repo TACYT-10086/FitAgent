@@ -6,39 +6,39 @@
 - Python / PostgreSQL / Milvus
 - DeepSeek API (Agent 大脑)
 - Ollama (本地 Embedding，bge-m3)
+- Agent Loop：手写轻量级 ReAct，不用 LangChain
 
-## 当前进度 (第 2 周)
+## 当前进度 (第 3 周)
 - [x] PostgreSQL 8 张业务表 + 模拟数据
 - [x] Milvus 向量化知识库 (20 条文档)
 - [x] 朴素 RAG 基线检索 (Top-1 命中验证)
 - [x] Agentic Query-Transformed RAG (rewrite / multi_query / hyde + 评分重试)
 - [x] 评测体系 (朴素 RAG vs Agentic RAG 对比，产出 `eval/rag_eval.json`)
-- [ ] 业务工具调用与权限控制
+- [x] 业务工具调用与权限控制 (7 个工具；身份由会话注入，硬权限矩阵拦截越权并留痕)
+- [x] 手写轻量级 ReAct Agent Loop，包含硬权限校验、JSON 兜底和多轮澄清
+- [x] 真实 trace 记录 (`trace/trace.jsonl`，一行一次工具调用，含耗时与越权请求标记)
 
 > 评测现状（诚实记录）：按 `hit@1` + MRR 的严格口径，**朴素 RAG 100%、Agentic 90%**
 > —— 查询改写在这份语料上不但没带来增益，反而**变差了**。详见下方「评测」一节。
 
-## 快速开始
-
-```bash
-python db/seed.py           # 初始化 PostgreSQL 业务数据与知识语料（幂等）
-python -m rag.ingest        # 把知识语料向量化写入 Milvus（幂等，每次全量重建）
-pytest -v                   # 跑测试
-```
-
 ## 测试
 
-全套测试都打真实服务：PostgreSQL、Milvus、Ollama 一律真连，没有 mock、没有打桩。
+全部真连真实服务：PostgreSQL、Milvus、Ollama。无 mock、无打桩。
 
 - 数据层：PostgreSQL 连接、`db/seed.py` 灌数与数据正确性
-- 向量层：Milvus 连接、`rag/ingest.py` 入库与 `rag/retriever.py` 检索
-- 决策层：`grade_documents` 评分与 `search_policy` 检索循环（真打 DeepSeek）
+- 向量层：Milvus 连接、`rag/ingest.py` 入库、`rag/retriever.py` 检索
+- 权限层：member / coach / admin 三类越权拦截、白名单外参数拒绝、被拒调用零数据库副作用
+- 工具层：`book_class` 真写库、`query_schedule` 只返回未来场次、`get_member_balance` 由流水派生消费额、满员拒绝
 
-需要真实 DeepSeek 调用的用例带 `@pytest.mark.llm`，默认跳过（花钱、结果不确定、还依赖网络）。手动开启：
-
-```bash
-$env:RUN_LLM_TESTS=1; pytest -m llm -v     # PowerShell
+```powershell
+pytest -v                                                                 # 全量
+pytest tests/test_db.py tests/test_seed.py tests/test_permissions.py -v   # 数据库与权限
+pytest tests/test_tools.py -v                                             # 业务工具
 ```
+
+唯一的跳过是 `tests/test_policy.py` 里 2 条带 `llm` 标记的用例：真打 DeepSeek、要花钱且结果不确定，默认跳过，`$env:RUN_LLM_TESTS=1` 才放行。其余一律真跑。
+
+`tests/test_tools.py::test_search_policy_end_to_end_real_api` 会真实调用 DeepSeek（约 7 秒），刻意不带 `llm` 标记，每次运行都跑。写库用例 `try/finally` 自清理，跑完数据库回到 seed 原状。
 
 ## 评测
 

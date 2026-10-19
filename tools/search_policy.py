@@ -62,6 +62,9 @@ def _choose_strategy(question: str) -> str:
         schema_hint='{"strategy": "rewrite", "reason": "为什么选它"}',
     )
 
+    print("=" * 12+ "模型选策略"+ "=" * 12)
+    print(data)
+    print("="*30)
     # 模型可能拼错或胡诌，resolve_strategy 兜底回落默认策略
     return resolve_strategy(data.get("strategy"))
 
@@ -128,6 +131,11 @@ def search_policy(
         name = planned if attempt == 0 else _different_strategy(rounds[0]["strategy"])
 
         queries = transform(question, name)
+        print("=" * 12+ "最终策略结果"+ "=" * 12)
+        print(queries)
+        print("="*30)
+        print()
+
         docs = _fuse(retrieve_many(queries, top_k=top_k))[:top_k]
         grade = grade_documents(question, docs)
 
