@@ -11,8 +11,9 @@
 - 「每自然月累计爽约 3 次，自次月起 7 天内暂停预约权限」（NO_SHOW_SUSPEND_*）
 - 「会籍到期后未续费者，入场权限自动冻结」（members.status 与 expire_date 双查）
 
-时间一律按 UTC 处理：库里全是 TIMESTAMPTZ，seed 也用 UTC，任何"按天"的边界都在
-Python 侧算好再传参，不用 ::date（那会依赖服务器时区，换个环境结果就漂）。
+时间口径：库里全是 TIMESTAMPTZ，存的是 UTC instant；但「今天/某一天/自然月」这类业务
+语义与返回给模型的时间字符串一律用北京时间（UTC+8）。任何"按天"的边界都在 Python 侧按
+北京时间算好再传参，不用 ::date（那会依赖服务器/数据库时区，换个环境结果就漂）。
 """
 
 from __future__ import annotations
@@ -22,7 +23,7 @@ import json
 import threading
 import time
 from dataclasses import dataclass
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Any, Callable
 
@@ -39,6 +40,7 @@ from agent.permissions import (
     resolve_member_id,
 )
 from db.connection import get_db_conn
+from timeutil import BEIJING_TZ, iso_beijing, now_beijing, to_beijing
 from tools.search_policy import search_policy as policy_search
 
 # ---- 业务常量（对应场馆规章，改这里就等于改规则）--------------------------------
@@ -174,7 +176,10 @@ def append_trace(record: dict[str, Any]) -> None:
 
 
 def _iso(value: Any) -> str | None:
-    if isinstance(value, (datetime, date)):
+    """时间统一转北京时间再序列化；DATE 字段本身没有时区，原样输出。"""
+    if isinstance(value, datetime):
+        return iso_beijing(value)
+    if isinstance(value, date):
         return value.isoformat()
     return None if value is None else str(value)
 
@@ -211,16 +216,16 @@ def _as_bool(value: Any, field: str) -> bool:
 
 
 def _day_start(day: str) -> datetime:
-    """把 YYYY-MM-DD 解析成当日 00:00 的 UTC 时间点。"""
+    """把 YYYY-MM-DD 解析成当日 00:00 的北京时间点（落库时等价于前一日 16:00 UTC）。"""
     try:
         parsed = date.fromisoformat(str(day).strip())
     except ValueError:
         raise ToolValidationError(f"日期格式必须是 YYYY-MM-DD，收到 {day!r}") from None
-    return datetime(parsed.year, parsed.month, parsed.day, tzinfo=timezone.utc)
+    return datetime(parsed.year, parsed.month, parsed.day, tzinfo=BEIJING_TZ)
 
 
 def _day_bounds(day: str) -> tuple[datetime, datetime]:
-    """返回某一天的 [00:00, 次日 00:00) 左闭右开区间。"""
+    """返回北京时间某一天的 [00:00, 次日 00:00) 左闭右开区间。"""
     start = _day_start(day)
     return start, start + timedelta(days=1)
 
@@ -255,17 +260,21 @@ def _clamp(value: Any, default: int, low: int, high: int, field: str) -> int:
 
 
 def _now() -> datetime:
-    return datetime.now(timezone.utc)
+    """当前北京时间。与库里 UTC instant 比较时是等价的绝对时间。"""
+    return now_beijing()
 
 
 def _month_start(moment: datetime) -> datetime:
-    return datetime(moment.year, moment.month, 1, tzinfo=timezone.utc)
+    """moment 所在自然月的月初（按北京时间切月）。"""
+    moment = to_beijing(moment)
+    return datetime(moment.year, moment.month, 1, tzinfo=BEIJING_TZ)
 
 
 def _shift_month(moment: datetime, months: int) -> datetime:
     """按自然月平移（只用于取月初，不用管天数溢出）。"""
+    moment = to_beijing(moment)
     index = moment.year * 12 + (moment.month - 1) + months
-    return datetime(index // 12, index % 12 + 1, 1, tzinfo=timezone.utc)
+    return datetime(index // 12, index % 12 + 1, 1, tzinfo=BEIJING_TZ)
 
 
 _BOOKED_STATUSES = ("booked", "attended")
@@ -428,7 +437,7 @@ def query_schedule(
             "count": len(schedules),
             "schedules": schedules,
             "note": (
-                "时间为 UTC；booked_count 是实时统计的已约人数，available 是剩余名额。"
+                "时间为北京时间（UTC+8）；booked_count 是实时统计的已约人数，available 是剩余名额。"
                 "未指定日期时默认只返回今天及以后的场次；要查历史请显式传 date 或 date_from。"
             ),
         },
@@ -610,7 +619,9 @@ def cancel_booking(
         b_id, b_status, s_id, start_time, sched_status, course_name = row
         if b_status == "cancelled":
             raise ToolConflictError(f"预约 #{b_id} 已经是取消状态")
-        if b_status not in _BOOKED_STATUSES:
+        # 只有 booked 能取消；attended / no_show 已经发生过，先按状态拒绝，
+        # 不要让下面的「已开课」把原因覆盖掉（否则报错会误导模型）。
+        if b_status != "booked":
             raise ToolConflictError(f"预约 #{b_id} 当前状态是 {b_status}，不可取消")
         if sched_status == "cancelled":
             raise ToolConflictError(f"「{course_name}」场次本身已取消，无需再取消预约")
@@ -665,10 +676,10 @@ def get_member_balance(session: SessionContext, *, member_id: Any = None) -> Too
         cur.execute(
             """
             SELECT id, name, card_type, status, join_date, expire_date,
-                   (expire_date - CURRENT_DATE) AS remaining_days
+                   (expire_date - %s) AS remaining_days
             FROM members WHERE id = %s
             """,
-            (target,),
+            (_now().date(), target),
         )
         row = cur.fetchone()
         if row is None:

@@ -18,3 +18,7 @@ venv/
 # 日志与本地数据
 trace/*.jsonl
 *.log
+
+# LangGraph 本地运行缓存
+.langgraph_api/
+*.pckl

@@ -6,10 +6,11 @@
 
 import random
 from collections import defaultdict
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, timedelta
 from pathlib import Path
 
 from db.connection import get_db_conn
+from timeutil import now_beijing
 
 INIT_SQL_PATH = Path(__file__).resolve().parent / "init.sql"
 
@@ -213,7 +214,7 @@ def _phone_pool(rng: random.Random, n: int) -> list[str]:
 
 
 def seed_members(cur, rng: random.Random, n: int) -> None:
-    today = date.today()
+    today = now_beijing().date()
     card_days = {"monthly": 30, "quarterly": 90, "yearly": 365}
     phones = _phone_pool(rng, n)
 
@@ -239,7 +240,7 @@ def seed_members(cur, rng: random.Random, n: int) -> None:
 
 
 def seed_coaches(cur, rng: random.Random) -> None:
-    today = date.today()
+    today = now_beijing().date()
     phones = _phone_pool(rng, len(COACHES))
 
     rows = []
@@ -266,7 +267,9 @@ def seed_courses(cur) -> None:
 
 
 def seed_schedules(cur, rng: random.Random, n: int) -> None:
-    now = datetime.now(timezone.utc)
+    # 排课时段（7/9/10/14/15/18/19/20/21 点）是北京时间的场馆营业时段，
+    # 必须落在北京时间墙钟上；写入 TIMESTAMPTZ 时 psycopg 会转成等价的 UTC instant。
+    now = now_beijing()
 
     cur.execute("select id, duration_min, capacity from courses order by id")
     courses = cur.fetchall()
@@ -298,7 +301,7 @@ def seed_schedules(cur, rng: random.Random, n: int) -> None:
 
 
 def seed_bookings(cur, rng: random.Random, n: int) -> None:
-    now = datetime.now(timezone.utc)
+    now = now_beijing()
 
     cur.execute("select id from members order by id")
     member_ids = [row[0] for row in cur.fetchall()]
@@ -367,7 +370,7 @@ TRANSACTION_NOTES = {
 
 
 def seed_transactions(cur, rng: random.Random, n: int) -> None:
-    now = datetime.now(timezone.utc)
+    now = now_beijing()
 
     cur.execute("select id from members order by id")
     member_ids = [row[0] for row in cur.fetchall()]

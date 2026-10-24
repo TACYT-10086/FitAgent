@@ -7,8 +7,9 @@
 - DeepSeek API (Agent 大脑)
 - Ollama (本地 Embedding，bge-m3)
 - Agent Loop：手写轻量级 ReAct，不用 LangChain
+- LangGraph：仅作为 Agent Chat UI 的托管适配层，核心 Agent Loop 仍手写
 
-## 当前进度 (第 3 周)
+## 当前进度 (第 4 周)
 - [x] PostgreSQL 8 张业务表 + 模拟数据
 - [x] Milvus 向量化知识库 (20 条文档)
 - [x] 朴素 RAG 基线检索 (Top-1 命中验证)
@@ -17,6 +18,9 @@
 - [x] 业务工具调用与权限控制 (7 个工具；身份由会话注入，硬权限矩阵拦截越权并留痕)
 - [x] 手写轻量级 ReAct Agent Loop，包含硬权限校验、JSON 兜底和多轮澄清
 - [x] 真实 trace 记录 (`trace/trace.jsonl`，一行一次工具调用，含耗时与越权请求标记)
+- [x] Web 交互层：基于 LangGraph 适配器接入 Agent Chat UI，支持网页端多轮对话
+- [x] 记忆持久化：引入 LangGraph PostgresSaver，实现基于 thread_id 的跨会话状态存储
+- [x] 可观测性：集成 LangSmith 运行追踪，实现 Agent 节点与工具调用可视化
 
 > 评测现状（诚实记录）：按 `hit@1` + MRR 的严格口径，**朴素 RAG 100%、Agentic 90%**
 > —— 查询改写在这份语料上不但没带来增益，反而**变差了**。详见下方「评测」一节。

@@ -36,6 +36,7 @@ from agent.tools import (
 )
 from db.connection import get_db_conn
 from rag.transform import available_strategies
+from timeutil import BEIJING_TZ
 
 MEMBER = SessionContext(ROLE_MEMBER, 1)  # 查询类工具不限身份，固定用会员 1 即可
 
@@ -100,10 +101,10 @@ def _free_slot() -> tuple[int, int]:
 
 
 def _busiest_day() -> tuple[str, int]:
-    """场次最多的一天（按 UTC 切天，与工具内部的 _day_bounds 口径一致），返回 (日期, 场次数)。"""
+    """场次最多的一天（按北京时间切天，与工具内部的 _day_bounds 口径一致），返回 (日期, 场次数)。"""
     rows = _fetchall(
         """
-        SELECT (start_time AT TIME ZONE 'UTC')::date AS d, count(*) AS n
+        SELECT (start_time AT TIME ZONE 'Asia/Shanghai')::date AS d, count(*) AS n
         FROM schedules GROUP BY d ORDER BY n DESC, d LIMIT 1
         """
     )
@@ -179,6 +180,7 @@ def test_query_schedule_defaults_to_future_only():
 
     now = datetime.now(timezone.utc)
     for item in result.data["schedules"]:
+        assert item["start_time"].endswith("+08:00"), "工具返回的时间不是北京时间"
         moment = datetime.fromisoformat(item["start_time"])
         assert moment > now, f"默认查询返回了历史场次：{item['start_time']} {item['course']}"
 
@@ -190,14 +192,14 @@ def test_query_schedule_explicit_past_date_returns_history():
     """
     day = _scalar(
         """
-        SELECT (start_time AT TIME ZONE 'UTC')::date AS d
+        SELECT (start_time AT TIME ZONE 'Asia/Shanghai')::date AS d
         FROM schedules WHERE start_time < now()
         GROUP BY d ORDER BY count(*) DESC, d LIMIT 1
         """
     )
     assert day is not None, "seed 数据里没有历史场次"
 
-    start = datetime(day.year, day.month, day.day, tzinfo=timezone.utc)
+    start = datetime(day.year, day.month, day.day, tzinfo=BEIJING_TZ)
     end = start + timedelta(days=1)
     expected = _scalar(
         "SELECT count(*) FROM schedules WHERE start_time >= %s AND start_time < %s",
@@ -335,20 +337,16 @@ def test_book_class_rejects_started_schedule():
     """状态还是 scheduled、但开课时间已过。
 
     这和「已结束」是两条不同的分支，只测一条会漏掉另一半。
+    自己造场次而不是从 seed 里碰运气：种子数据只在特定时刻才恰好有「已开课但未结束」的课。
     """
-    schedule_id = _scalar(
-        """
-        SELECT id FROM schedules
-        WHERE status = 'scheduled' AND start_time <= now()
-        ORDER BY start_time DESC LIMIT 1
-        """
-    )
-    assert schedule_id is not None, "seed 数据里没有「已开课但状态仍是 scheduled」的场次"
+    schedule_id = _new_temp_schedule(capacity=5, starts_in=timedelta(hours=-1))
+    try:
+        with pytest.raises(ToolConflictError) as exc:
+            book_class(SessionContext(ROLE_MEMBER, _active_member_id()), schedule_id=schedule_id)
 
-    with pytest.raises(ToolConflictError) as exc:
-        book_class(SessionContext(ROLE_MEMBER, _active_member_id()), schedule_id=schedule_id)
-
-    assert "已经开课" in str(exc.value)
+        assert "已经开课" in str(exc.value)
+    finally:
+        _execute("DELETE FROM schedules WHERE id = %s", (schedule_id,))
 
 
 def test_book_class_rejects_beyond_booking_window():
@@ -646,7 +644,7 @@ def test_daily_report_coach_has_no_revenue():
     coach_id = _scalar(
         """
         SELECT coach_id FROM schedules
-        WHERE (start_time AT TIME ZONE 'UTC')::date = %s
+        WHERE (start_time AT TIME ZONE 'Asia/Shanghai')::date = %s
         GROUP BY coach_id ORDER BY count(*) DESC LIMIT 1
         """,
         (date.fromisoformat(day),),
@@ -745,8 +743,8 @@ def make_no_show_member():
     created: list[tuple[int, list[int]]] = []
 
     def _make(count: int) -> int:
-        now = datetime.now(timezone.utc)
-        month_start = datetime(now.year, now.month, 1, tzinfo=timezone.utc)
+        now = datetime.now(BEIJING_TZ)
+        month_start = datetime(now.year, now.month, 1, tzinfo=BEIJING_TZ)
         prev_last = month_start - timedelta(days=1)
 
         member_id = _new_temp_member()
@@ -759,7 +757,7 @@ def make_no_show_member():
             schedule_id = _new_temp_schedule(
                 capacity=5,
                 starts_at=datetime(
-                    prev_last.year, prev_last.month, day, 10, 0, tzinfo=timezone.utc
+                    prev_last.year, prev_last.month, day, 10, 0, tzinfo=BEIJING_TZ
                 ),
                 status="finished",
             )
@@ -783,8 +781,8 @@ def make_no_show_member():
 
 
 def _month_start() -> datetime:
-    now = datetime.now(timezone.utc)
-    return datetime(now.year, now.month, 1, tzinfo=timezone.utc)
+    now = datetime.now(BEIJING_TZ)
+    return datetime(now.year, now.month, 1, tzinfo=BEIJING_TZ)
 
 
 def test_no_show_suspension_triggers_in_first_7_days(make_no_show_member):
